@@ -6,6 +6,8 @@ let gameState = 'START'; // START, PLAYING, GAMEOVER
 let score = 0;
 let speed = 5;
 let frames = 0;
+let distance = 0;
+const MAX_DISTANCE = 1000; // Goal to reach
 
 // Dimensions
 const WIDTH = 320;
@@ -20,8 +22,14 @@ const player = {
     y: HEIGHT - 100,
     width: 30,
     height: 60,
+    blinkFrames: 0,
 
     draw: function() {
+        if (this.blinkFrames > 0) {
+            this.blinkFrames--;
+            if (Math.floor(this.blinkFrames / 5) % 2 === 0) return; // Blink effect
+        }
+
         const laneCenterX = SIDEWALK_WIDTH + (this.lane * LANE_WIDTH) + (LANE_WIDTH / 2);
         const x = laneCenterX;
         const y = this.y;
@@ -80,6 +88,11 @@ const player = {
         } else if (direction === 'right' && this.lane < 2) {
             this.lane++;
         }
+    },
+
+    hit: function() {
+        this.blinkFrames = 30; // Blink for 0.5 sec
+        // Maybe slow down logic here if desired
     }
 };
 
@@ -94,6 +107,7 @@ class GameObject {
         this.width = 40;
         this.height = 40;
         this.markedForDeletion = false;
+        this.collected = false; // To prevent double hits
     }
 
     update() {
@@ -104,14 +118,13 @@ class GameObject {
     }
 
     draw() {
+        if (this.collected) return;
+
         const laneCenterX = SIDEWALK_WIDTH + (this.lane * LANE_WIDTH) + (LANE_WIDTH / 2);
         const x = laneCenterX - (this.width / 2);
 
         if (this.type === 'obstacle') {
             // Draw a Puddle/Hole/Cone
-            // Let's draw a Traffic Cone (top view - circle with orange/white rings)
-            // Or a Puddle (easier)
-            // Let's do a Puddle for simplicity but style it nicely
             ctx.fillStyle = '#555'; // Dark grey hole
             ctx.beginPath();
             ctx.ellipse(x + 20, this.y + 20, 18, 12, 0, 0, Math.PI * 2);
@@ -197,6 +210,7 @@ function startGame(e) {
     gameState = 'PLAYING';
     score = 0;
     speed = 5;
+    distance = 0;
     gameObjects = [];
     frames = 0;
     loop();
@@ -206,11 +220,12 @@ function resetGame() {
     startGame();
 }
 
-function gameOver() {
+function gameWin() {
     gameState = 'GAMEOVER';
     document.getElementById('hud').classList.add('hidden');
     document.getElementById('game-over-screen').classList.remove('hidden');
-    document.getElementById('final-score').innerText = 'Score: ' + score;
+    // Change text for success if needed dynamically, but HTML static is fine for now
+    document.getElementById('final-score').innerText = 'Puan: ' + score;
 }
 
 function spawnObject() {
@@ -223,11 +238,9 @@ function spawnObject() {
         const lane = Math.floor(Math.random() * 3);
         const type = Math.random() > 0.3 ? 'obstacle' : 'battery'; // 70% obstacles
 
-        // Prevent spawn on top of another object (simple check)
-        // If the last object spawned is in the same lane and too close
+        // Prevent spawn on top of another object
         const lastObj = gameObjects[gameObjects.length - 1];
         if (lastObj && lastObj.lane === lane && lastObj.y < 100) {
-            // Pick another lane
             const newLane = (lane + 1) % 3;
              gameObjects.push(new GameObject(type, newLane));
         } else {
@@ -237,9 +250,7 @@ function spawnObject() {
 }
 
 function checkCollisions() {
-    // Player hitbox logic needs to match the new drawing (Center aligned)
     const laneCenterX = SIDEWALK_WIDTH + (player.lane * LANE_WIDTH) + (LANE_WIDTH / 2);
-    // Hitbox roughly the size of the scooter
     const playerHitbox = {
         x: laneCenterX - 15, // width 30
         y: player.y,
@@ -248,11 +259,11 @@ function checkCollisions() {
     };
 
     gameObjects.forEach(obj => {
+        if (obj.collected) return; // Already interacted
+
         const laneCenterX_Obj = SIDEWALK_WIDTH + (obj.lane * LANE_WIDTH) + (LANE_WIDTH / 2);
         const objX = laneCenterX_Obj - (obj.width / 2);
 
-        // Simple AABB collision
-        // Shrink hitbox slightly to be forgiving
         const pPadding = 5;
         const oPadding = 5;
 
@@ -264,11 +275,17 @@ function checkCollisions() {
         ) {
             // Collision detected
             if (obj.type === 'obstacle') {
-                gameOver();
+                // NO GAME OVER
+                // Just visual feedback and maybe point reduction
+                if (player.blinkFrames === 0) { // Only if not already invincible
+                    player.hit();
+                    score = Math.max(0, score - 5); // Penalty
+                    obj.collected = true; // "Used up" the obstacle so it doesn't hit again
+                }
             } else if (obj.type === 'battery') {
                 score += 10;
                 obj.markedForDeletion = true;
-                // Add a floating text or effect here ideally
+                obj.collected = true;
             }
         }
     });
@@ -329,8 +346,15 @@ function loop() {
 
     // Update
     frames++;
-    speed += 0.002; // Slowly increase speed
-    if (speed > 12) speed = 12; // Max speed
+    distance += speed / 10; // Increment distance
+    speed += 0.002;
+    if (speed > 12) speed = 12;
+
+    // Check Win Condition
+    if (distance >= MAX_DISTANCE) {
+        gameWin();
+        return;
+    }
 
     // Increase score based on distance too
     if (frames % 10 === 0) score++;
@@ -350,6 +374,8 @@ function loop() {
 
     // UI Update
     document.getElementById('score').innerText = score;
+    const progressPct = Math.min(100, (distance / MAX_DISTANCE) * 100);
+    document.getElementById('progress-bar').style.width = progressPct + '%';
 
     requestAnimationFrame(loop);
 }

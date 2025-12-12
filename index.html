@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,19 +13,22 @@
         <div id="ui-layer">
             <div id="start-screen">
                 <div class="logo">Martı</div>
-                <p>Tap to Start</p>
-                <p class="instruction">Avoid obstacles & collect batteries!</p>
+                <p>Başlamak için Dokun</p>
+                <p class="instruction">Engellerden kaçın ve pilleri topla!</p>
             </div>
 
             <div id="game-over-screen" class="hidden">
-                <h2>Ride Finished!</h2>
-                <p id="final-score">Score: 0</p>
-                <a href="https://www.marti.tech/" target="_blank" class="cta-button">Download Martı</a>
-                <button id="restart-btn">Try Again</button>
+                <h2>Hedefe Ulaştın!</h2>
+                <p id="final-score">Puan: 0</p>
+                <a href="https://www.marti.tech/" target="_blank" class="cta-button">Hemen İndir</a>
+                <button id="restart-btn">Tekrar Oyna</button>
             </div>
 
             <div id="hud" class="hidden">
-                <span id="score">0</span>
+                <div id="score-container">Puan: <span id="score">0</span></div>
+                <div id="progress-container">
+                    <div id="progress-bar"></div>
+                </div>
             </div>
         </div>
     </div>
