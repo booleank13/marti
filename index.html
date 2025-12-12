@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Martı Playable Ad</title>
+    <title>Martı: Şehir Uçuşu</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,21 +13,22 @@
         <div id="ui-layer">
             <div id="start-screen">
                 <div class="logo">Martı</div>
-                <p>Başlamak için Dokun</p>
-                <p class="instruction">Engellerden kaçın ve pilleri topla!</p>
+                <p>Şehri Keşfet</p>
+                <div class="hand-icon">👆</div>
+                <p class="instruction">Yükselmek için Basılı Tut</p>
             </div>
 
             <div id="game-over-screen" class="hidden">
-                <h2>Hedefe Ulaştın!</h2>
-                <p id="final-score">Puan: 0</p>
-                <a href="https://www.marti.tech/" target="_blank" class="cta-button">Hemen İndir</a>
-                <button id="restart-btn">Tekrar Oyna</button>
+                <h2>Varış Noktasına Ulaştın!</h2>
+                <p id="final-message">Şehrin keyfini Martı ile çıkar.</p>
+                <a href="https://www.marti.tech/" target="_blank" class="cta-button">Hemen Başla</a>
+                <button id="restart-btn">Tekrar Uç</button>
             </div>
 
             <div id="hud" class="hidden">
-                <div id="score-container">Puan: <span id="score">0</span></div>
                 <div id="progress-container">
                     <div id="progress-bar"></div>
+                    <div id="progress-icon">🛴</div>
                 </div>
             </div>
         </div>
