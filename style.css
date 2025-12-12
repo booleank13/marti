@@ -1,0 +1,108 @@
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: 'Arial', sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#ad-container {
+    position: relative;
+    width: 320px;
+    height: 480px;
+    background-color: #333;
+    overflow: hidden;
+    box-shadow: 0 0 20px rgba(0,0,0,0.2);
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+#ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Let clicks pass through to canvas/container for game control */
+}
+
+#start-screen, #game-over-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    pointer-events: auto; /* Re-enable clicks for buttons */
+    text-align: center;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.logo {
+    font-size: 40px;
+    font-weight: bold;
+    color: #26D07C; /* Martı Green */
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 0px #fff;
+}
+
+.instruction {
+    font-size: 14px;
+    margin-top: 10px;
+    color: #ccc;
+}
+
+.cta-button {
+    background-color: #26D07C;
+    color: white;
+    padding: 15px 30px;
+    border-radius: 25px;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 18px;
+    margin-top: 20px;
+    border: 2px solid white;
+    transition: transform 0.1s;
+}
+
+.cta-button:active {
+    transform: scale(0.95);
+}
+
+#restart-btn {
+    background: transparent;
+    border: 1px solid white;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    margin-top: 15px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#hud {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 24px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 1px 1px 2px black;
+}

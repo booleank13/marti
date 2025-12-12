@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Martı Playable Ad</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="ad-container">
+        <canvas id="gameCanvas" width="320" height="480"></canvas>
+
+        <div id="ui-layer">
+            <div id="start-screen">
+                <div class="logo">Martı</div>
+                <p>Tap to Start</p>
+                <p class="instruction">Avoid obstacles & collect batteries!</p>
+            </div>
+
+            <div id="game-over-screen" class="hidden">
+                <h2>Ride Finished!</h2>
+                <p id="final-score">Score: 0</p>
+                <a href="https://www.marti.tech/" target="_blank" class="cta-button">Download Martı</a>
+                <button id="restart-btn">Try Again</button>
+            </div>
+
+            <div id="hud" class="hidden">
+                <span id="score">0</span>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
