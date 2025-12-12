@@ -54,7 +54,7 @@ canvas {
 }
 
 #start-screen {
-    background: rgba(0,0,0,0.3);
+    background: rgba(0,0,0,0.4);
 }
 
 .hidden {
@@ -118,16 +118,37 @@ canvas {
 
 #hud {
     position: absolute;
-    top: 20px;
-    left: 20px;
-    right: 20px;
+    top: 15px;
+    left: 15px;
+    right: 15px;
     pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.top-bar {
+    display: flex;
+    justify-content: flex-end;
+}
+
+#score-container {
+    background: rgba(0,0,0,0.5);
+    padding: 5px 15px;
+    border-radius: 20px;
+    color: #FFD700;
+    font-weight: bold;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid rgba(255,255,255,0.3);
 }
 
 #progress-container {
     width: 100%;
     height: 12px;
-    background: rgba(0,0,0,0.2);
+    background: rgba(0,0,0,0.3);
     border-radius: 6px;
     position: relative;
     border: 1px solid rgba(255,255,255,0.5);
@@ -143,15 +164,31 @@ canvas {
 
 #progress-icon {
     position: absolute;
-    top: -8px;
-    left: 0%; /* Will move with JS */
+    top: -10px;
+    left: 0%;
     font-size: 20px;
     transition: left 0.1s linear;
-    text-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    text-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
+
+.score-board {
+    margin: 10px 0;
+    background: rgba(0,0,0,0.3);
+    padding: 10px 30px;
+    border-radius: 10px;
+}
+
+#final-score {
+    font-size: 40px;
+    font-weight: bold;
+    color: #26D07C;
+    margin: 0;
+    text-shadow: 1px 1px 0 #fff;
 }
 
 #final-message {
-    font-size: 18px;
-    margin-bottom: 20px;
+    font-size: 16px;
+    margin-bottom: 10px;
     max-width: 80%;
+    opacity: 0.9;
 }

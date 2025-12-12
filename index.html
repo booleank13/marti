@@ -20,15 +20,24 @@
 
             <div id="game-over-screen" class="hidden">
                 <h2>Varış Noktasına Ulaştın!</h2>
+                <div class="score-board">
+                    <p>Toplam Puan</p>
+                    <p id="final-score">0</p>
+                </div>
                 <p id="final-message">Şehrin keyfini Martı ile çıkar.</p>
                 <a href="https://www.marti.tech/" target="_blank" class="cta-button">Hemen Başla</a>
                 <button id="restart-btn">Tekrar Uç</button>
             </div>
 
             <div id="hud" class="hidden">
+                <div class="top-bar">
+                    <div id="score-container">
+                        <span class="icon">⚡</span> <span id="score">0</span>
+                    </div>
+                </div>
                 <div id="progress-container">
                     <div id="progress-bar"></div>
-                    <div id="progress-icon">🛴</div>
+                    <div id="progress-icon">🐦</div>
                 </div>
             </div>
         </div>
