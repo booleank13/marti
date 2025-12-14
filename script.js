@@ -4,12 +4,12 @@ const ctx = canvas.getContext('2d');
 // --- Game Configuration ---
 const WIDTH = 320;
 const HEIGHT = 480;
-const GRAVITY = 0.5;
-const JUMP_FORCE = -7;
-const MAX_SPEED = 8;
-const BASE_SCROLL_SPEED = 3.5;
-const SCOOTER_SPEED = 5;
-const TAG_SPEED = 9;
+const GRAVITY = 0.4;
+const JUMP_FORCE = -6;
+const MAX_SPEED = 6;
+const BASE_SCROLL_SPEED = 2.5;
+const SCOOTER_SPEED = 4;
+const TAG_SPEED = 7;
 
 // --- State ---
 let gameState = 'START'; // START, PLAYING, GAMEOVER
