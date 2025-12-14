@@ -1,591 +1,624 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// Game State
-let gameState = 'START';
+// --- Game Configuration ---
+const WIDTH = 320;
+const HEIGHT = 480;
+const GRAVITY = 0.5;
+const JUMP_FORCE = -7;
+const MAX_SPEED = 8;
+const BASE_SCROLL_SPEED = 3.5;
+const SCOOTER_SPEED = 5;
+const TAG_SPEED = 9;
+
+// --- State ---
+let gameState = 'START'; // START, PLAYING, GAMEOVER
 let frames = 0;
 let distance = 0;
 let score = 0;
-const MAX_DISTANCE = 2500; // Increased slightly for more play time
-
-// Dimensions
-const WIDTH = 320;
-const HEIGHT = 480;
-
-// Inputs
+let highScore = 0;
+let mode = 'BIRD'; // BIRD, SCOOTER, TAG
+let modeTimer = 0;
 let isTouching = false;
 
-// Physics
-const GRAVITY = 0.4;
-const LIFT = -6;
-const JETPACK_FORCE = -0.6;
-const TERMINAL_VELOCITY = 8;
-let currentScrollSpeed = 3;
-const BASE_SCROLL_SPEED = 3;
-const TURBO_SCROLL_SPEED = 6;
+// --- Assets / Drawing Helpers ---
+const COLORS = {
+    martiGreen: '#26D07C',
+    martiDark: '#0f3d2e',
+    skyTop: '#2b1055',
+    skyBot: '#7597de',
+    bridge: '#333',
+    light: '#FFD700'
+};
 
-// Combo System
-let comboCount = 0;
-let comboTimer = 0;
-
-// Assets
-const bird = {
-    x: 60,
+// --- Player Object ---
+const player = {
+    x: 50,
     y: HEIGHT / 2,
-    velocity: 0,
-    width: 36,
-    height: 24,
+    dy: 0,
+    width: 40,
+    height: 30,
     angle: 0,
-    trailTimer: 0,
-    turboTimer: 0, // > 0 means Turbo Mode is active
+    wobble: 0,
+
+    reset: function() {
+        this.y = HEIGHT / 2;
+        this.dy = 0;
+        this.angle = 0;
+        mode = 'BIRD';
+        modeTimer = 0;
+    },
 
     update: function() {
-        if (gameState !== 'PLAYING') return;
-
-        // Turbo Logic
-        if (this.turboTimer > 0) {
-            this.turboTimer--;
-            currentScrollSpeed = TURBO_SCROLL_SPEED;
-            // Auto-fly / Hover effect in turbo? Or just normal physics?
-            // Let's keep physics but make it floatier or faster
-        } else {
-            currentScrollSpeed = BASE_SCROLL_SPEED;
+        // Mode Management
+        if (modeTimer > 0) {
+            modeTimer--;
+            if (modeTimer === 0) {
+                mode = 'BIRD'; // Revert to normal
+                spawnEffect(this.x, this.y, 20, '#fff'); // Poof effect
+            }
         }
+
+        // Speed settings based on mode
+        let currentSpeed = BASE_SCROLL_SPEED;
+        if (mode === 'SCOOTER') currentSpeed = SCOOTER_SPEED;
+        if (mode === 'TAG') currentSpeed = TAG_SPEED;
 
         // Physics
         if (isTouching) {
-            this.velocity += JETPACK_FORCE;
-            this.trailTimer++;
-            if (this.turboTimer > 0) {
-                 if (this.trailTimer % 3 === 0) spawnParticle(this.x, this.y + 15, '#26D07C'); // Green trail
-            } else {
-                 if (this.trailTimer % 5 === 0) spawnParticle(this.x, this.y + 10, 'white');
-            }
+            this.dy += -0.8; // Jetpack feel
+            // Add particles
+            if (frames % 5 === 0) spawnParticle(this.x, this.y + 10, mode === 'TAG' ? '#FFD700' : '#fff');
         } else {
-            this.velocity += GRAVITY;
-            this.trailTimer = 0;
+            this.dy += GRAVITY;
         }
 
-        // Cap velocity
-        if (this.velocity > TERMINAL_VELOCITY) this.velocity = TERMINAL_VELOCITY;
-        if (this.velocity < -TERMINAL_VELOCITY) this.velocity = -TERMINAL_VELOCITY;
+        // Cap speed
+        if (this.dy > MAX_SPEED) this.dy = MAX_SPEED;
+        if (this.dy < -MAX_SPEED) this.dy = -MAX_SPEED;
 
-        this.y += this.velocity;
+        this.y += this.dy;
 
-        // Boundaries
-        if (this.y < 0) {
-            this.y = 0;
-            this.velocity = 0;
-        }
-        if (this.y > HEIGHT - 70) {
-            this.y = HEIGHT - 70;
-            this.velocity = -4;
-        }
+        // Floor/Ceiling
+        if (this.y < 20) { this.y = 20; this.dy = 0; }
+        if (this.y > HEIGHT - 50) { this.y = HEIGHT - 50; this.dy = -5; } // Bounce off floor
 
-        // Angle
-        this.angle = Math.min(Math.PI / 5, Math.max(-Math.PI / 5, (this.velocity * 0.05)));
+        // Rotation
+        this.angle = this.dy * 0.05;
+        this.wobble = Math.sin(frames * 0.1) * 2;
     },
 
     draw: function() {
         ctx.save();
-        ctx.translate(this.x, this.y);
+        ctx.translate(this.x, this.y + this.wobble);
         ctx.rotate(this.angle);
 
-        if (this.turboTimer > 0) {
-            // DRAW SCOOTER RIDING MODE
-
-            // Scooter Body
-            ctx.fillStyle = '#26D07C';
-            ctx.fillRect(-10, 15, 30, 4); // Deck
-            ctx.fillRect(15, 5, 3, 15); // Stem
-            ctx.fillStyle = '#333';
-            ctx.fillRect(12, 5, 10, 2); // Handlebars
-
-            // Wheels
-            ctx.fillStyle = 'black';
-            ctx.beginPath(); ctx.arc(-5, 20, 4, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(20, 20, 4, 0, Math.PI*2); ctx.fill();
-
-            // Bird on top (shifted up)
-            ctx.translate(0, -5);
-        }
-
-        // Draw Seagull
-
-        // Body
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 22, 12, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Tail
-        ctx.fillStyle = '#eee';
-        ctx.beginPath();
-        ctx.moveTo(-15, 0);
-        ctx.lineTo(-28, -5);
-        ctx.lineTo(-28, 5);
-        ctx.fill();
-
-        // Wing (Flapping)
-        const flapSpeed = this.turboTimer > 0 ? 0.5 : 0.2;
-        const wingOffset = Math.sin(frames * flapSpeed) * 8;
-        ctx.fillStyle = '#ddd';
-        ctx.beginPath();
-        ctx.moveTo(-5, -2);
-        ctx.lineTo(12, -8 + wingOffset);
-        ctx.lineTo(0, 8);
-        ctx.fill();
-
-        // Eye
-        ctx.fillStyle = 'black';
-        ctx.beginPath();
-        ctx.arc(14, -4, 2, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Beak
-        ctx.fillStyle = '#FFA500';
-        ctx.beginPath();
-        ctx.moveTo(18, -2);
-        ctx.lineTo(28, 2);
-        ctx.lineTo(18, 5);
-        ctx.fill();
-
-        // Turbo Glow
-        if (this.turboTimer > 0) {
-            ctx.globalCompositeOperation = 'destination-over';
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = '#26D07C';
-            ctx.fillStyle = 'rgba(38, 208, 124, 0.5)';
-            ctx.beginPath();
-            ctx.arc(0,0, 30, 0, Math.PI*2);
-            ctx.fill();
-            ctx.shadowBlur = 0;
-            ctx.globalCompositeOperation = 'source-over';
+        if (mode === 'TAG') {
+            this.drawTagCar();
+        } else if (mode === 'SCOOTER') {
+            this.drawScooter();
+        } else {
+            this.drawSeagull();
         }
 
         ctx.restore();
+    },
+
+    drawSeagull: function() {
+        // Body
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 18, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Wing (Flapping)
+        ctx.fillStyle = '#ddd';
+        const wingY = Math.sin(frames * 0.3) * 8;
+        ctx.beginPath();
+        ctx.moveTo(-5, -2);
+        ctx.lineTo(10, -10 + wingY);
+        ctx.lineTo(5, 5);
+        ctx.fill();
+
+        // Head
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(12, -8, 7, 0, Math.PI*2);
+        ctx.fill();
+
+        // Beak
+        ctx.fillStyle = '#FFC107';
+        ctx.beginPath();
+        ctx.moveTo(16, -6);
+        ctx.lineTo(24, -3);
+        ctx.lineTo(16, 0);
+        ctx.fill();
+
+        // Eye
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(14, -9, 1.5, 0, Math.PI*2);
+        ctx.fill();
+    },
+
+    drawScooter: function() {
+        // Martı Scooter
+        // Deck
+        ctx.fillStyle = COLORS.martiGreen;
+        ctx.fillRect(-15, 15, 30, 4);
+
+        // Stem
+        ctx.fillStyle = '#333';
+        ctx.fillRect(10, -5, 3, 20);
+
+        // Handlebars
+        ctx.fillStyle = '#333';
+        ctx.fillRect(5, -5, 12, 2);
+
+        // Wheels
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.arc(-10, 20, 5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(15, 20, 5, 0, Math.PI*2); ctx.fill();
+
+        // Rider (Abstract Bird)
+        ctx.translate(0, -5);
+        this.drawSeagull();
+    },
+
+    drawTagCar: function() {
+        // Glow effect
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = 20;
+
+        // Car Body (Yellow Taxi/TAG style)
+        ctx.fillStyle = '#FFD700'; // Gold/Yellow
+        ctx.beginPath();
+        ctx.roundRect(-20, 0, 50, 20, 5);
+        ctx.fill();
+
+        // Roof
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.moveTo(-10, 0);
+        ctx.lineTo(-5, -12);
+        ctx.lineTo(15, -12);
+        ctx.lineTo(25, 0);
+        ctx.fill();
+
+        // Windows
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.moveTo(-8, -1);
+        ctx.lineTo(-4, -10);
+        ctx.lineTo(14, -10);
+        ctx.lineTo(23, -1);
+        ctx.fill();
+
+        // Wheels
+        ctx.shadowBlur = 0; // Reset glow for wheels
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.arc(-10, 20, 6, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(20, 20, 6, 0, Math.PI*2); ctx.fill();
+
+        // TAG Text
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 8px Arial';
+        ctx.fillText('TAG', -5, 14);
     }
 };
 
-// Particles
+// --- Environment / Parallax ---
+const bgLayers = [
+    { type: 'stars', speed: 0.1, elements: [] },
+    { type: 'city_far', speed: 0.3, elements: [] },
+    { type: 'bridge', speed: 0.5, x: WIDTH },
+    { type: 'city_near', speed: 2.0, elements: [] } // Floor
+];
+
+function initEnvironment() {
+    // Generate Stars
+    bgLayers[0].elements = [];
+    for(let i=0; i<30; i++) {
+        bgLayers[0].elements.push({
+            x: Math.random() * WIDTH,
+            y: Math.random() * HEIGHT/2,
+            size: Math.random() * 2,
+            alpha: Math.random()
+        });
+    }
+
+    // Generate Far City (Silhouette)
+    bgLayers[1].elements = [];
+    let cx = 0;
+    while(cx < WIDTH * 2) {
+        let w = 20 + Math.random() * 40;
+        let h = 50 + Math.random() * 100;
+        bgLayers[1].elements.push({x: cx, w: w, h: h});
+        cx += w;
+    }
+}
+
+function updateDrawEnvironment(speed) {
+    // 1. Stars
+    ctx.fillStyle = '#fff';
+    bgLayers[0].elements.forEach(star => {
+        star.x -= speed * 0.1;
+        if(star.x < 0) star.x = WIDTH;
+        ctx.globalAlpha = star.alpha;
+        ctx.beginPath(); ctx.arc(star.x, star.y, star.size, 0, Math.PI*2); ctx.fill();
+    });
+    ctx.globalAlpha = 1.0;
+
+    // 2. Far City
+    ctx.fillStyle = '#1e1b33'; // Dark purple silhouette
+    let cityFar = bgLayers[1];
+    cityFar.elements.forEach(b => {
+        b.x -= speed * 0.3;
+    });
+    // Recycle
+    if(cityFar.elements[0].x + cityFar.elements[0].w < 0) {
+        let first = cityFar.elements.shift();
+        first.x = cityFar.elements[cityFar.elements.length-1].x + cityFar.elements[cityFar.elements.length-1].w;
+        cityFar.elements.push(first);
+    }
+    cityFar.elements.forEach(b => {
+        ctx.fillRect(b.x, HEIGHT - 60 - b.h, b.w+1, b.h + 60);
+        // Random lights
+        ctx.fillStyle = '#FCEEB5';
+        if(b.x % 3 === 0) ctx.fillRect(b.x+5, HEIGHT-80, 2, 2);
+        ctx.fillStyle = '#1e1b33';
+    });
+
+    // 3. Bosphorus Bridge
+    let bridge = bgLayers[2];
+    bridge.x -= speed * 0.5;
+    if(bridge.x < -400) bridge.x = WIDTH + 200; // Respawn
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 2;
+    // Cables
+    ctx.beginPath();
+    ctx.moveTo(bridge.x, HEIGHT-50);
+    ctx.quadraticCurveTo(bridge.x + 150, 50, bridge.x + 300, HEIGHT-50);
+    ctx.stroke();
+    // Vertical lines (Suspenders)
+    for(let i=0; i<=30; i++) {
+        let bx = bridge.x + i * 10;
+        // Simple curve approx
+        let by = 50 + Math.pow((i-15)/15, 2) * (HEIGHT-100);
+        if (by < HEIGHT-50) {
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(bx, HEIGHT-50);
+            ctx.stroke();
+            // Light on cable
+            ctx.fillStyle = '#ff0055'; // Pink/Red bridge lights
+            ctx.beginPath(); ctx.arc(bx, by, 1, 0, Math.PI*2); ctx.fill();
+        }
+    }
+    ctx.restore();
+
+    // 4. Ground (Road)
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, HEIGHT - 50, WIDTH, 50);
+    // Road markers
+    ctx.fillStyle = '#555';
+    let markerOffset = (distance % 40);
+    for(let i=0; i<WIDTH+40; i+=40) {
+        ctx.fillRect(i - markerOffset, HEIGHT - 25, 20, 2);
+    }
+}
+
+// --- Objects (Obstacles / Powerups) ---
+let gameObjects = [];
+
+function spawnObject() {
+    let rate = 60;
+    if (mode === 'TAG') rate = 20; // Spawn more stuff to smash in TAG mode
+    else if (mode === 'SCOOTER') rate = 40;
+
+    if (frames % rate === 0) {
+        let r = Math.random();
+        let y = 50 + Math.random() * (HEIGHT - 150);
+
+        // Ensure not too close
+        if (gameObjects.length > 0 && gameObjects[gameObjects.length-1].x > WIDTH - 50) return;
+
+        let type = 'OBSTACLE';
+
+        // Spawn Logic
+        if (r > 0.96) type = 'TAG_POWERUP'; // Rare
+        else if (r > 0.90) type = 'SCOOTER_POWERUP';
+        else if (r > 0.70) type = 'BATTERY';
+        else type = 'OBSTACLE';
+
+        // In TAG mode, mostly obstacles to smash
+        if (mode === 'TAG') {
+            if (Math.random() > 0.8) type = 'BATTERY'; // Bonus points
+            else type = 'OBSTACLE';
+        }
+
+        gameObjects.push({
+            type: type,
+            x: WIDTH,
+            y: y,
+            w: 30,
+            h: 30,
+            active: true
+        });
+    }
+}
+
+function updateDrawObjects(speed) {
+    for (let i = gameObjects.length - 1; i >= 0; i--) {
+        let o = gameObjects[i];
+        o.x -= speed;
+
+        // Magnet for TAG mode
+        if (mode === 'TAG' && o.type === 'BATTERY') {
+            o.y += (player.y - o.y) * 0.1;
+        }
+
+        if (o.active) {
+            drawObject(o);
+            checkCollision(o, i);
+        }
+
+        if (o.x < -50) gameObjects.splice(i, 1);
+    }
+}
+
+function drawObject(o) {
+    const cx = o.x + o.w/2;
+    const cy = o.y + o.h/2;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    if (o.type === 'BATTERY') {
+        // Battery Icon
+        ctx.fillStyle = COLORS.martiGreen;
+        ctx.fillRect(-8, -12, 16, 24);
+        ctx.fillStyle = '#fff'; // Tip
+        ctx.fillRect(-4, -16, 8, 4);
+        // Bolt
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.moveTo(-2, -5); ctx.lineTo(4, 0); ctx.lineTo(-2, 5); ctx.fill();
+
+    } else if (o.type === 'SCOOTER_POWERUP') {
+        // Green Orb
+        ctx.shadowColor = COLORS.martiGreen;
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(0,0, 15, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = COLORS.martiGreen;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Draw Mini Scooter Icon (replacing emoji)
+        ctx.fillStyle = COLORS.martiGreen;
+        ctx.fillRect(-8, 5, 16, 2); // Deck
+        ctx.fillRect(4, -5, 2, 10); // Stem
+        ctx.beginPath(); ctx.arc(-5, 8, 3, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(8, 8, 3, 0, Math.PI*2); ctx.fill();
+
+
+    } else if (o.type === 'TAG_POWERUP') {
+        // Gold Orb
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(0,0, 15, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 10px Arial';
+        ctx.fillText('TAG', -10, 4);
+
+    } else { // OBSTACLE (Drone/Traffic)
+        ctx.fillStyle = '#d63031';
+        // Drone shape
+        ctx.fillRect(-15, -5, 30, 10);
+        ctx.beginPath(); ctx.arc(-15, 0, 5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(15, 0, 5, 0, Math.PI*2); ctx.fill();
+        // Blinking light
+        if (Math.floor(frames / 10) % 2 === 0) {
+            ctx.fillStyle = 'red';
+            ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
+        }
+    }
+    ctx.restore();
+}
+
+function checkCollision(o, index) {
+    // Simple AABB
+    if (
+        player.x < o.x + o.w &&
+        player.x + player.width > o.x &&
+        player.y < o.y + o.h &&
+        player.y + player.height > o.y
+    ) {
+        if (o.type === 'OBSTACLE') {
+            if (mode === 'TAG') {
+                // SMASH
+                spawnEffect(o.x, o.y, 10, '#d63031');
+                score += 50;
+                shakeScreen(5);
+                gameObjects.splice(index, 1);
+            } else {
+                // HIT
+                spawnEffect(player.x, player.y, 5, '#d63031');
+                shakeScreen(5);
+                if (mode === 'SCOOTER') {
+                    mode = 'BIRD'; // Downgrade
+                    modeTimer = 0;
+                    gameObjects.splice(index, 1);
+                } else {
+                    // Penalty
+                    score = Math.max(0, score - 50);
+                    gameObjects.splice(index, 1);
+                    // Could end game here, but "No Lose" logic usually preferred for ads.
+                    // Let's just slow down
+                }
+            }
+        } else {
+            // Collect
+            if (o.type === 'BATTERY') {
+                score += 100;
+                spawnEffect(o.x, o.y, 10, COLORS.martiGreen);
+            } else if (o.type === 'SCOOTER_POWERUP') {
+                mode = 'SCOOTER';
+                modeTimer = 600; // 10s
+                score += 200;
+                spawnEffect(o.x, o.y, 20, COLORS.martiGreen);
+                showTagStatus("SCOOTER MODE");
+            } else if (o.type === 'TAG_POWERUP') {
+                mode = 'TAG';
+                modeTimer = 300; // 5s
+                score += 500;
+                spawnEffect(o.x, o.y, 30, '#FFD700');
+                showTagStatus("TAG POWER!");
+            }
+            gameObjects.splice(index, 1);
+        }
+    }
+}
+
+// --- FX ---
 let particles = [];
+let shake = 0;
+
 function spawnParticle(x, y, color) {
     particles.push({
-        x: x,
-        y: y,
-        vx: -2 - Math.random(),
-        vy: (Math.random() - 0.5) * 2,
+        x: x, y: y,
+        vx: (Math.random() - 0.5) * 4,
+        vy: (Math.random() - 0.5) * 4,
         life: 1.0,
         color: color
     });
 }
+
+function spawnEffect(x, y, count, color) {
+    for(let i=0; i<count; i++) spawnParticle(x, y, color);
+}
+
 function updateDrawParticles() {
     for (let i = particles.length - 1; i >= 0; i--) {
         let p = particles[i];
         p.x += p.vx;
         p.y += p.vy;
         p.life -= 0.05;
-
-        if (p.life <= 0) {
-            particles.splice(i, 1);
-            continue;
-        }
-
-        ctx.globalAlpha = p.life;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 2 + Math.random() * 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1.0;
-    }
-}
-
-// Floating Text
-let texts = [];
-function spawnText(x, y, text, color = "#FFD700", size = 20) {
-    texts.push({
-        x: x,
-        y: y,
-        text: text,
-        life: 1.0,
-        dy: -1,
-        color: color,
-        size: size
-    });
-}
-function updateDrawTexts() {
-    ctx.textAlign = "center";
-
-    for (let i = texts.length - 1; i >= 0; i--) {
-        let t = texts[i];
-        t.y += t.dy;
-        t.life -= 0.02;
-
-        if (t.life <= 0) {
-            texts.splice(i, 1);
-            continue;
-        }
-
-        ctx.globalAlpha = t.life;
-        ctx.font = `bold ${t.size}px Arial`;
-        ctx.fillStyle = t.color;
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = 2;
-
-        ctx.fillText(t.text, t.x, t.y);
-        ctx.strokeText(t.text, t.x, t.y);
-        ctx.globalAlpha = 1.0;
-    }
-}
-
-// Parallax Background Layers
-const bgLayers = [
-    { type: 'sky', speed: 0.5, elements: [] },
-    { type: 'bridge', speed: 0.8, x: WIDTH, w: 400 }, // Bridge Layer
-    { type: 'far', speed: 1.0, elements: [] },
-    { type: 'near', speed: 0, elements: [] } // Speed set dynamically
-];
-
-function initBackgrounds() {
-    // Generate Far City
-    bgLayers[2].elements = [];
-    for(let x=0; x<WIDTH+100; x+=30) {
-        bgLayers[2].elements.push({
-            x: x,
-            w: 30,
-            h: 50 + Math.random()*80,
-            c: '#0a3a5a'
-        });
-    }
-}
-
-function updateDrawBackgrounds() {
-
-    // 2. Bridge (Iconic Bosphorus style)
-    let bridge = bgLayers[1];
-    bridge.x -= currentScrollSpeed * 0.2; // Move slow
-
-    // Draw Bridge logic
-    // If bridge is off screen left, maybe respawn it far right after some time?
-    if (bridge.x + bridge.w < -100) {
-        if (Math.random() < 0.005) bridge.x = WIDTH + 100; // Random respawn
-    }
-
-    ctx.strokeStyle = 'rgba(20, 20, 60, 0.3)';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    // Cables
-    ctx.moveTo(bridge.x, HEIGHT - 50);
-    ctx.lineTo(bridge.x + bridge.w / 2, 50); // Tower top
-    ctx.lineTo(bridge.x + bridge.w, HEIGHT - 50);
-    ctx.stroke();
-    // Tower
-    ctx.fillStyle = 'rgba(30, 30, 80, 0.5)';
-    ctx.fillRect(bridge.x + bridge.w/2 - 10, 50, 20, HEIGHT);
-
-
-    // 3. Far City
-    let layer = bgLayers[2];
-    layer.elements.forEach(el => {
-        el.x -= currentScrollSpeed * 0.3;
-    });
-    // Recycle
-    if(layer.elements[0].x + layer.elements[0].w < 0) {
-         let first = layer.elements.shift();
-         first.x = layer.elements[layer.elements.length-1].x + first.w;
-         first.h = 50 + Math.random()*80;
-         layer.elements.push(first);
-    }
-
-    ctx.fillStyle = '#0a3a5a';
-    layer.elements.forEach(el => {
-        ctx.fillRect(el.x, HEIGHT - 80 - el.h, el.w + 1, el.h + 80);
-    });
-
-    // 4. Near City (The floor collider)
-    ctx.fillStyle = '#15405e';
-    // Moving ground effect
-    ctx.fillRect(0, HEIGHT - 60, WIDTH, 60);
-
-    // Building details passing by in foreground
-    ctx.fillStyle = '#1e5175';
-    for(let i=0; i<10; i++) {
-        // use distance for offset
-        let bx = (i * 80) - (distance % 80);
-        ctx.fillRect(bx, HEIGHT - 60 - 30, 40, 30);
-        // Windows
-        ctx.fillStyle = '#FCEEB5';
-        if(i%2===0) ctx.fillRect(bx+5, HEIGHT-80, 5, 10);
-        ctx.fillStyle = '#1e5175'; // reset
-    }
-}
-
-// Collectibles & Obstacles
-let gameObjects = [];
-
-function spawnGameObject() {
-    // Spawn faster in Turbo mode
-    let rate = bird.turboTimer > 0 ? 30 : 60;
-
-    if (frames % rate === 0) {
-        const rand = Math.random();
-        const y = 50 + Math.random() * (HEIGHT - 150);
-
-        if (rand > 0.9) {
-             // Powerup: Scooter (Rare)
-             gameObjects.push({
-                type: 'scooter',
-                x: WIDTH,
-                y: y,
-                w: 40,
-                h: 30,
-                angle: 0
-            });
-        } else if (rand > 0.4) {
-            // Collectible: Battery / Logo
-            gameObjects.push({
-                type: 'collectible',
-                x: WIDTH,
-                y: y,
-                w: 30,
-                h: 30,
-                color: '#26D07C',
-                angle: 0
-            });
-        } else {
-            // Obstacle: Cloud / Wind
-            gameObjects.push({
-                type: 'obstacle',
-                x: WIDTH,
-                y: y,
-                w: 50,
-                h: 30,
-                color: '#ddd'
-            });
+        if (p.life <= 0) particles.splice(i, 1);
+        else {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI*2); ctx.fill();
+            ctx.globalAlpha = 1.0;
         }
     }
 }
 
-function updateDrawGameObjects() {
-    for (let i = gameObjects.length - 1; i >= 0; i--) {
-        let obj = gameObjects[i];
+function shakeScreen(amount) {
+    shake = amount;
+}
 
-        // Magnet Effect in Turbo Mode
-        if (bird.turboTimer > 0 && obj.type !== 'obstacle') {
-            let dx = bird.x - obj.x;
-            let dy = bird.y - obj.y;
-            let dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist < 200) {
-                obj.x += (dx / dist) * 10;
-                obj.y += (dy / dist) * 10;
-            } else {
-                obj.x -= currentScrollSpeed;
-            }
-        } else {
-            obj.x -= currentScrollSpeed;
-        }
+// --- UI Interaction ---
+const statusEl = document.getElementById('tag-status');
+function showTagStatus(msg) {
+    if(!statusEl) return;
+    statusEl.innerText = msg;
+    statusEl.classList.add('active');
+    setTimeout(() => statusEl.classList.remove('active'), 2000);
+}
 
-        // Draw
-        if (obj.type === 'collectible') {
-            obj.angle += 0.05;
-            ctx.save();
-            ctx.translate(obj.x + obj.w/2, obj.y + obj.h/2);
-            ctx.rotate(obj.angle);
+// --- Core Loop ---
+function loop() {
+    if (gameState !== 'PLAYING') return;
 
-            // Draw Martı Logo-ish
-            ctx.fillStyle = obj.color;
-            ctx.beginPath();
-            ctx.moveTo(0, -15);
-            ctx.lineTo(12, 0);
-            ctx.lineTo(0, 15);
-            ctx.lineTo(-12, 0);
-            ctx.fill();
+    requestAnimationFrame(loop);
 
-            // Inner Bolt
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.moveTo(-2, -5);
-            ctx.lineTo(4, 0);
-            ctx.lineTo(-2, 5);
-            ctx.fill();
-
-            ctx.restore();
-        } else if (obj.type === 'scooter') {
-            // Draw Powerup Box
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-            ctx.strokeStyle = '#26D07C';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
-
-            // Scooter Icon
-            ctx.fillStyle = '#26D07C';
-            ctx.fillRect(obj.x + 5, obj.y + 20, 30, 5); // Deck
-            ctx.fillRect(obj.x + 25, obj.y + 5, 5, 20); // Stem
-            ctx.beginPath(); ctx.arc(obj.x+10, obj.y+25, 4, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(obj.x+35, obj.y+25, 4, 0, Math.PI*2); ctx.fill();
-
-        } else {
-            // Cloud Obstacle
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.beginPath();
-            ctx.arc(obj.x + 15, obj.y + 15, 15, 0, Math.PI*2);
-            ctx.arc(obj.x + 35, obj.y + 15, 12, 0, Math.PI*2);
-            ctx.arc(obj.x + 25, obj.y + 5, 15, 0, Math.PI*2);
-            ctx.fill();
-        }
-
-        // Collision
-        if (
-            bird.x < obj.x + obj.w &&
-            bird.x + bird.width > obj.x &&
-            bird.y < obj.y + obj.h &&
-            bird.y + bird.height > obj.y
-        ) {
-            if (obj.type === 'collectible') {
-                // Combo Logic
-                comboCount++;
-                comboTimer = 60; // 1 second window
-                let multiplier = Math.min(5, Math.floor(comboCount / 2) + 1);
-
-                let points = 50 * multiplier;
-                score += points;
-
-                spawnText(obj.x, obj.y, `+${points}`);
-                if (comboCount > 1) spawnText(obj.x, obj.y - 20, `${comboCount}x Combo!`, "#fff", 14);
-
-                spawnParticle(obj.x, obj.y, '#26D07C');
-                gameObjects.splice(i, 1);
-            } else if (obj.type === 'scooter') {
-                // Activate Turbo
-                bird.turboTimer = 300; // 5 seconds
-                spawnText(bird.x, bird.y - 30, "TURBO MODE!", "#fff", 24);
-                spawnParticle(obj.x, obj.y, '#FFD700');
-                score += 500;
-                gameObjects.splice(i, 1);
-            } else {
-                // Obstacle Hit
-                if (bird.turboTimer > 0) {
-                    // Destroy obstacle
-                    spawnText(obj.x, obj.y, "SMASH!");
-                    spawnParticle(obj.x, obj.y, '#fff');
-                    score += 20;
-                    gameObjects.splice(i, 1);
-                } else {
-                    // Penalty
-                    spawnText(bird.x, bird.y, "Ups!");
-                    score = Math.max(0, score - 10);
-                    bird.velocity = 5;
-                    bird.x -= 10;
-                    comboCount = 0; // Reset combo
-                    setTimeout(() => { if(bird.x < 60) bird.x = 60; }, 300);
-                    gameObjects.splice(i, 1);
-                }
-            }
-        }
-
-        if (obj.x + obj.w < -50) {
-            gameObjects.splice(i, 1);
-        }
+    // Shake
+    let sx = 0, sy = 0;
+    if (shake > 0) {
+        sx = (Math.random() - 0.5) * shake;
+        sy = (Math.random() - 0.5) * shake;
+        shake *= 0.9;
+        if (shake < 0.5) shake = 0;
     }
 
-    if(bird.x < 60) bird.x += 0.5;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+    frames++;
+    let currentSpeed = BASE_SCROLL_SPEED;
+    if (mode === 'SCOOTER') currentSpeed = SCOOTER_SPEED;
+    if (mode === 'TAG') currentSpeed = TAG_SPEED;
+
+    distance += currentSpeed;
+
+    updateDrawEnvironment(currentSpeed);
+
+    spawnObject();
+    updateDrawObjects(currentSpeed);
+    updateDrawParticles();
+
+    player.update();
+    player.draw();
+
+    ctx.restore();
+
+    // UI Updates
+    document.getElementById('score').innerText = score;
+    let pct = Math.min(100, (distance / 4000) * 100); // 4000 dist goal
+    document.getElementById('progress-bar').style.width = pct + '%';
+
+    if (pct >= 100) endGame();
 }
 
+function startGame() {
+    gameState = 'PLAYING';
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('hud').classList.remove('hidden');
+    document.getElementById('game-over-screen').classList.add('hidden');
 
-// Input Handling
-const adContainer = document.getElementById('ad-container');
-
-function startInput(e) {
-    e.preventDefault();
-    isTouching = true;
-    if (gameState === 'START') startGame();
+    player.reset();
+    frames = 0;
+    distance = 0;
+    score = 0;
+    gameObjects = [];
+    particles = [];
+    initEnvironment();
+    loop();
 }
 
-function endInput(e) {
-    e.preventDefault();
-    isTouching = false;
+function endGame() {
+    gameState = 'GAMEOVER';
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('game-over-screen').classList.remove('hidden');
+
+    document.getElementById('final-score').innerText = score;
+    // Mock collected stats
+    document.getElementById('stat-distance').innerText = Math.floor(distance / 10) + 'm';
+    document.getElementById('stat-mode').innerText = mode === 'TAG' ? 'TAG' : 'Scooter';
 }
 
-adContainer.addEventListener('mousedown', startInput);
-adContainer.addEventListener('mouseup', endInput);
-adContainer.addEventListener('touchstart', startInput, {passive: false});
-adContainer.addEventListener('touchend', endInput, {passive: false});
+// Event Listeners
+const container = document.getElementById('ad-container');
+container.addEventListener('mousedown', (e) => { e.preventDefault(); isTouching = true; if(gameState==='START') startGame(); });
+container.addEventListener('mouseup', (e) => { e.preventDefault(); isTouching = false; });
+container.addEventListener('touchstart', (e) => { e.preventDefault(); isTouching = true; if(gameState==='START') startGame(); }, {passive:false});
+container.addEventListener('touchend', (e) => { e.preventDefault(); isTouching = false; }, {passive:false});
 
 document.getElementById('restart-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     startGame();
 });
 
-function startGame() {
-    document.getElementById('start-screen').classList.add('hidden');
-    document.getElementById('hud').classList.remove('hidden');
-    document.getElementById('game-over-screen').classList.add('hidden');
-    gameState = 'PLAYING';
-
-    // Reset Game State
-    bird.y = HEIGHT / 2;
-    bird.velocity = 0;
-    bird.x = 60;
-    bird.turboTimer = 0;
-    frames = 0;
-    distance = 0;
-    score = 0;
-    comboCount = 0;
-    gameObjects = [];
-    particles = [];
-    texts = [];
-
-    initBackgrounds();
-    loop();
-}
-
-function gameOver() {
-    gameState = 'GAMEOVER';
-    document.getElementById('hud').classList.add('hidden');
-    document.getElementById('game-over-screen').classList.remove('hidden');
-    document.getElementById('final-score').innerText = score;
-}
-
-function loop() {
-    if (gameState !== 'PLAYING') return;
-
-    ctx.clearRect(0, 0, WIDTH, HEIGHT);
-
-    // Update
-    frames++;
-    distance += currentScrollSpeed;
-
-    if (comboTimer > 0) comboTimer--;
-    else comboCount = 0;
-
-    updateDrawBackgrounds();
-
-    spawnGameObject();
-    updateDrawGameObjects();
-
-    bird.update();
-    bird.draw();
-
-    updateDrawParticles();
-    updateDrawTexts();
-
-    // UI Update
-    document.getElementById('score').innerText = score;
-    const progressPct = Math.min(100, (distance / MAX_DISTANCE) * 100);
-    document.getElementById('progress-bar').style.width = progressPct + '%';
-    document.getElementById('progress-icon').style.left = `calc(${progressPct}% - 10px)`;
-
-    // Win Condition
-    if (distance >= MAX_DISTANCE) {
-        gameOver();
-        return;
-    }
-
-    requestAnimationFrame(loop);
-}
-
-// Initial Render
-initBackgrounds();
-updateDrawBackgrounds();
-bird.draw();
+// Init
+initEnvironment();
+// Draw one frame for background
+updateDrawEnvironment(0);
+player.draw();
