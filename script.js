@@ -1,591 +1,496 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+// Game Configuration
+const CANVAS_WIDTH = 320;
+const CANVAS_HEIGHT = 480;
+const LANE_WIDTH = 80;
+const LANE_CENTER_X = CANVAS_WIDTH / 2;
+const TOTAL_DISTANCE = 5000; // Arbitrary units
 
-// Game State
-let gameState = 'START';
-let frames = 0;
-let distance = 0;
-let score = 0;
-const MAX_DISTANCE = 2500; // Increased slightly for more play time
-
-// Dimensions
-const WIDTH = 320;
-const HEIGHT = 480;
-
-// Inputs
-let isTouching = false;
-
-// Physics
-const GRAVITY = 0.4;
-const LIFT = -6;
-const JETPACK_FORCE = -0.6;
-const TERMINAL_VELOCITY = 8;
-let currentScrollSpeed = 3;
-const BASE_SCROLL_SPEED = 3;
-const TURBO_SCROLL_SPEED = 6;
-
-// Combo System
-let comboCount = 0;
-let comboTimer = 0;
-
-// Assets
-const bird = {
-    x: 60,
-    y: HEIGHT / 2,
-    velocity: 0,
-    width: 36,
-    height: 24,
-    angle: 0,
-    trailTimer: 0,
-    turboTimer: 0, // > 0 means Turbo Mode is active
-
-    update: function() {
-        if (gameState !== 'PLAYING') return;
-
-        // Turbo Logic
-        if (this.turboTimer > 0) {
-            this.turboTimer--;
-            currentScrollSpeed = TURBO_SCROLL_SPEED;
-            // Auto-fly / Hover effect in turbo? Or just normal physics?
-            // Let's keep physics but make it floatier or faster
-        } else {
-            currentScrollSpeed = BASE_SCROLL_SPEED;
-        }
-
-        // Physics
-        if (isTouching) {
-            this.velocity += JETPACK_FORCE;
-            this.trailTimer++;
-            if (this.turboTimer > 0) {
-                 if (this.trailTimer % 3 === 0) spawnParticle(this.x, this.y + 15, '#26D07C'); // Green trail
-            } else {
-                 if (this.trailTimer % 5 === 0) spawnParticle(this.x, this.y + 10, 'white');
-            }
-        } else {
-            this.velocity += GRAVITY;
-            this.trailTimer = 0;
-        }
-
-        // Cap velocity
-        if (this.velocity > TERMINAL_VELOCITY) this.velocity = TERMINAL_VELOCITY;
-        if (this.velocity < -TERMINAL_VELOCITY) this.velocity = -TERMINAL_VELOCITY;
-
-        this.y += this.velocity;
-
-        // Boundaries
-        if (this.y < 0) {
-            this.y = 0;
-            this.velocity = 0;
-        }
-        if (this.y > HEIGHT - 70) {
-            this.y = HEIGHT - 70;
-            this.velocity = -4;
-        }
-
-        // Angle
-        this.angle = Math.min(Math.PI / 5, Math.max(-Math.PI / 5, (this.velocity * 0.05)));
-    },
-
-    draw: function() {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.angle);
-
-        if (this.turboTimer > 0) {
-            // DRAW SCOOTER RIDING MODE
-
-            // Scooter Body
-            ctx.fillStyle = '#26D07C';
-            ctx.fillRect(-10, 15, 30, 4); // Deck
-            ctx.fillRect(15, 5, 3, 15); // Stem
-            ctx.fillStyle = '#333';
-            ctx.fillRect(12, 5, 10, 2); // Handlebars
-
-            // Wheels
-            ctx.fillStyle = 'black';
-            ctx.beginPath(); ctx.arc(-5, 20, 4, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(20, 20, 4, 0, Math.PI*2); ctx.fill();
-
-            // Bird on top (shifted up)
-            ctx.translate(0, -5);
-        }
-
-        // Draw Seagull
-
-        // Body
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 22, 12, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Tail
-        ctx.fillStyle = '#eee';
-        ctx.beginPath();
-        ctx.moveTo(-15, 0);
-        ctx.lineTo(-28, -5);
-        ctx.lineTo(-28, 5);
-        ctx.fill();
-
-        // Wing (Flapping)
-        const flapSpeed = this.turboTimer > 0 ? 0.5 : 0.2;
-        const wingOffset = Math.sin(frames * flapSpeed) * 8;
-        ctx.fillStyle = '#ddd';
-        ctx.beginPath();
-        ctx.moveTo(-5, -2);
-        ctx.lineTo(12, -8 + wingOffset);
-        ctx.lineTo(0, 8);
-        ctx.fill();
-
-        // Eye
-        ctx.fillStyle = 'black';
-        ctx.beginPath();
-        ctx.arc(14, -4, 2, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Beak
-        ctx.fillStyle = '#FFA500';
-        ctx.beginPath();
-        ctx.moveTo(18, -2);
-        ctx.lineTo(28, 2);
-        ctx.lineTo(18, 5);
-        ctx.fill();
-
-        // Turbo Glow
-        if (this.turboTimer > 0) {
-            ctx.globalCompositeOperation = 'destination-over';
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = '#26D07C';
-            ctx.fillStyle = 'rgba(38, 208, 124, 0.5)';
-            ctx.beginPath();
-            ctx.arc(0,0, 30, 0, Math.PI*2);
-            ctx.fill();
-            ctx.shadowBlur = 0;
-            ctx.globalCompositeOperation = 'source-over';
-        }
-
-        ctx.restore();
-    }
+// Colors
+const COLORS = {
+    skyTop: '#2b003b',
+    skyBottom: '#ff0055',
+    groundTop: '#1a0024',
+    groundBottom: '#0d0015',
+    grid: '#ff00ff',
+    martiGreen: '#26D07C',
+    road: '#111',
+    tagBlack: '#111',
+    obstacle: '#ff3333'
 };
 
-// Particles
-let particles = [];
-function spawnParticle(x, y, color) {
-    particles.push({
-        x: x,
-        y: y,
-        vx: -2 - Math.random(),
-        vy: (Math.random() - 0.5) * 2,
-        life: 1.0,
-        color: color
-    });
-}
-function updateDrawParticles() {
-    for (let i = particles.length - 1; i >= 0; i--) {
-        let p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life -= 0.05;
+// Game State
+const state = {
+    isPlaying: false,
+    isGameOver: false,
+    distanceTraveled: 0,
+    speed: 0,
+    baseSpeed: 10,
+    tagModeSpeed: 18,
+    lane: 1, // 0: Left, 1: Center, 2: Right
+    playerX: LANE_CENTER_X,
+    targetX: LANE_CENTER_X,
+    mode: 'SCOOTER', // 'SCOOTER' or 'TAG'
+    tagTimer: 0,
+    obstacles: [],
+    particles: [],
+    bgOffset: 0
+};
 
-        if (p.life <= 0) {
-            particles.splice(i, 1);
-            continue;
-        }
+// Canvas Setup
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const ui = {
+    start: document.getElementById('start-screen'),
+    hud: document.getElementById('hud'),
+    end: document.getElementById('end-screen'),
+    fill: document.getElementById('progress-fill'),
+    mode: document.getElementById('mode-indicator')
+};
 
-        ctx.globalAlpha = p.life;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 2 + Math.random() * 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1.0;
+// Helper: Random Range
+const randomRange = (min, max) => Math.random() * (max - min) + min;
+
+// --- INPUT HANDLING ---
+let touchStartX = 0;
+
+function handleInput(type, clientX) {
+    if (!state.isPlaying && !state.isGameOver) {
+        startGame();
+        return;
+    }
+
+    if (state.isGameOver) return;
+
+    // Determine swipe or tap
+    const half = window.innerWidth / 2; // Approximate relative to screen
+    // For simplicity in this ad context, let's map screen clicks to left/right logic relative to center
+    // But since we have a 320px container centered, we should use relative coordinates
+
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+
+    if (x < CANVAS_WIDTH / 2) {
+        moveLeft();
+    } else {
+        moveRight();
     }
 }
 
-// Floating Text
-let texts = [];
-function spawnText(x, y, text, color = "#FFD700", size = 20) {
-    texts.push({
-        x: x,
-        y: y,
-        text: text,
-        life: 1.0,
-        dy: -1,
-        color: color,
-        size: size
-    });
+// Add event listener to start screen to ensure first click registers
+ui.start.addEventListener('mousedown', (e) => handleInput('click', e.clientX));
+ui.start.addEventListener('touchstart', (e) => handleInput('tap', e.touches[0].clientX));
+
+canvas.addEventListener('mousedown', (e) => handleInput('click', e.clientX));
+canvas.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+}, {passive: false});
+
+canvas.addEventListener('touchend', (e) => {
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchEndX - touchStartX;
+    if (Math.abs(diff) > 30) {
+        if (diff > 0) moveRight();
+        else moveLeft();
+    } else {
+        handleInput('tap', touchEndX);
+    }
+}, {passive: false});
+
+function moveLeft() {
+    if (state.lane > 0) state.lane--;
+    updateTargetX();
 }
-function updateDrawTexts() {
-    ctx.textAlign = "center";
 
-    for (let i = texts.length - 1; i >= 0; i--) {
-        let t = texts[i];
-        t.y += t.dy;
-        t.life -= 0.02;
+function moveRight() {
+    if (state.lane < 2) state.lane++;
+    updateTargetX();
+}
 
-        if (t.life <= 0) {
-            texts.splice(i, 1);
-            continue;
+function updateTargetX() {
+    // Lanes are at x = 80, 160, 240 (roughly 320/3)
+    // Actually let's do: Center is 160. Left is 80. Right is 240.
+    const laneDist = 80;
+    state.targetX = LANE_CENTER_X + (state.lane - 1) * laneDist;
+}
+
+// --- GAME LOGIC ---
+
+function startGame() {
+    state.isPlaying = true;
+    state.speed = state.baseSpeed;
+    ui.start.classList.add('hidden');
+    ui.hud.classList.remove('hidden');
+    loop();
+}
+
+function endGame() {
+    state.isPlaying = false;
+    state.isGameOver = true;
+    ui.hud.classList.add('hidden');
+    ui.end.classList.remove('hidden');
+}
+
+function spawnObstacle() {
+    // 5% chance per frame is too high, maybe 1-2%
+    if (Math.random() < 0.02) {
+        const lane = Math.floor(randomRange(0, 3));
+        const type = Math.random() < 0.2 ? 'TAG_TOKEN' : 'OBSTACLE'; // 20% chance for powerup
+
+        // Prevent overlapping too much
+        const tooClose = state.obstacles.some(o => o.z > 800 && o.lane === lane);
+        if (!tooClose) {
+            state.obstacles.push({
+                x: LANE_CENTER_X + (lane - 1) * 80,
+                y: -50, // Start above horizon
+                z: 1000, // Distance
+                lane: lane,
+                type: type,
+                active: true
+            });
         }
-
-        ctx.globalAlpha = t.life;
-        ctx.font = `bold ${t.size}px Arial`;
-        ctx.fillStyle = t.color;
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = 2;
-
-        ctx.fillText(t.text, t.x, t.y);
-        ctx.strokeText(t.text, t.x, t.y);
-        ctx.globalAlpha = 1.0;
     }
 }
 
-// Parallax Background Layers
-const bgLayers = [
-    { type: 'sky', speed: 0.5, elements: [] },
-    { type: 'bridge', speed: 0.8, x: WIDTH, w: 400 }, // Bridge Layer
-    { type: 'far', speed: 1.0, elements: [] },
-    { type: 'near', speed: 0, elements: [] } // Speed set dynamically
-];
+function update() {
+    // Movement lerp
+    state.playerX += (state.targetX - state.playerX) * 0.2;
 
-function initBackgrounds() {
-    // Generate Far City
-    bgLayers[2].elements = [];
-    for(let x=0; x<WIDTH+100; x+=30) {
-        bgLayers[2].elements.push({
+    // Speed progression
+    if (state.mode === 'TAG') {
+        state.speed = state.tagModeSpeed;
+        state.tagTimer--;
+        if (state.tagTimer <= 0) {
+            state.mode = 'SCOOTER';
+            ui.mode.innerText = "SCOOTER MODU";
+            ui.mode.style.color = "white";
+            ui.mode.style.borderColor = COLORS.martiGreen;
+        }
+    } else {
+        state.speed = state.baseSpeed;
+    }
+
+    // Distance
+    state.distanceTraveled += state.speed;
+    const progress = Math.min((state.distanceTraveled / TOTAL_DISTANCE) * 100, 100);
+    ui.fill.style.width = `${progress}%`;
+
+    if (state.distanceTraveled >= TOTAL_DISTANCE) {
+        endGame();
+    }
+
+    // Obstacles
+    spawnObstacle();
+
+    // Move obstacles
+    state.obstacles.forEach(obs => {
+        obs.z -= state.speed;
+
+        // Collision logic (approximate)
+        if (obs.z < 100 && obs.z > 0 && obs.lane === state.lane && obs.active) {
+            if (obs.type === 'TAG_TOKEN') {
+                activateTagMode();
+                obs.active = false;
+            } else if (obs.type === 'OBSTACLE') {
+                if (state.mode === 'TAG') {
+                    // Smash through
+                    obs.active = false;
+                    createParticles(state.playerX, 400, COLORS.obstacle);
+                } else {
+                    // Hit! For this ad, let's just slow down or shake, no death to keep flow?
+                    // "No lose" mechanics are better for ads.
+                    // Just shake screen and slow down.
+                    shakeScreen();
+                    obs.active = false;
+                    state.distanceTraveled -= 200; // Penalty
+                }
+            }
+        }
+    });
+
+    // Cleanup
+    state.obstacles = state.obstacles.filter(o => o.z > -200);
+
+    // Background Scroll
+    state.bgOffset = (state.bgOffset + state.speed) % 40;
+}
+
+function activateTagMode() {
+    state.mode = 'TAG';
+    state.tagTimer = 300; // 5 seconds at 60fps
+    ui.mode.innerText = "TAG MODU (HIZLI & GÜÇLÜ)";
+    ui.mode.style.color = "#ffff00";
+    ui.mode.style.borderColor = "#ffff00";
+}
+
+function shakeScreen() {
+    canvas.style.transform = `translate(${Math.random()*10-5}px, ${Math.random()*10-5}px)`;
+    setTimeout(() => canvas.style.transform = 'none', 200);
+}
+
+function createParticles(x, y, color) {
+    for (let i = 0; i < 10; i++) {
+        state.particles.push({
             x: x,
-            w: 30,
-            h: 50 + Math.random()*80,
-            c: '#0a3a5a'
+            y: y,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10,
+            life: 1.0,
+            color: color
         });
     }
 }
 
-function updateDrawBackgrounds() {
+function updateParticles() {
+    state.particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.05;
+    });
+    state.particles = state.particles.filter(p => p.life > 0);
+}
 
-    // 2. Bridge (Iconic Bosphorus style)
-    let bridge = bgLayers[1];
-    bridge.x -= currentScrollSpeed * 0.2; // Move slow
+// --- DRAWING ---
 
-    // Draw Bridge logic
-    // If bridge is off screen left, maybe respawn it far right after some time?
-    if (bridge.x + bridge.w < -100) {
-        if (Math.random() < 0.005) bridge.x = WIDTH + 100; // Random respawn
-    }
+function draw() {
+    updateParticles();
 
-    ctx.strokeStyle = 'rgba(20, 20, 60, 0.3)';
-    ctx.lineWidth = 4;
+    // Clear
+    ctx.fillStyle = COLORS.skyTop;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // 1. Draw Sunset Sky (Vaporwave Gradient)
+    const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT/2);
+    grad.addColorStop(0, COLORS.skyTop);
+    grad.addColorStop(1, COLORS.skyBottom);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT/2);
+
+    // Sun
+    ctx.fillStyle = '#ffcc00';
     ctx.beginPath();
-    // Cables
-    ctx.moveTo(bridge.x, HEIGHT - 50);
-    ctx.lineTo(bridge.x + bridge.w / 2, 50); // Tower top
-    ctx.lineTo(bridge.x + bridge.w, HEIGHT - 50);
+    ctx.arc(CANVAS_WIDTH/2, CANVAS_HEIGHT/2, 60, 0, Math.PI*2);
+    ctx.fill();
+
+    // 2. Draw Ground/Road (Perspective Grid)
+    // Horizon line at Y = 240
+    const horizonY = CANVAS_HEIGHT / 2;
+
+    ctx.fillStyle = COLORS.groundBottom;
+    ctx.fillRect(0, horizonY, CANVAS_WIDTH, CANVAS_HEIGHT/2);
+
+    // Grid Lines (Moving)
+    ctx.strokeStyle = COLORS.grid;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.3;
+
+    // Vertical lines (Perspective)
+    for (let i = -5; i <= 5; i++) {
+        const x1 = CANVAS_WIDTH/2 + i * 20; // Horizon point
+        const x2 = CANVAS_WIDTH/2 + i * 150; // Bottom point
+        ctx.beginPath();
+        ctx.moveTo(x1, horizonY);
+        ctx.lineTo(x2, CANVAS_HEIGHT);
+        ctx.stroke();
+    }
+
+    // Horizontal lines (Moving towards viewer)
+    let z = (state.distanceTraveled % 100) / 100; // 0 to 1
+    // Draw expanding horizontal lines
+    for (let i = 0; i < 10; i++) {
+        let y = horizonY + Math.pow((i + z)/10, 2) * (CANVAS_HEIGHT/2);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(CANVAS_WIDTH, y);
+        ctx.stroke();
+    }
+    ctx.globalAlpha = 1.0;
+
+    // 3. Draw Objects (Pseudo-3D)
+    // Sort obstacles by Z (far to near) so they render correctly
+    // Actually, simply drawing them in order of creation is mostly fine if they don't overtake each other
+    // But reverse order is safer
+    const renderList = [...state.obstacles].sort((a,b) => b.z - a.z);
+
+    renderList.forEach(obs => {
+        if (!obs.active) return;
+        // Project 3D to 2D
+        // Perspective formula: scale = f / (z + f)
+        const f = 300; // field of view
+        const scale = f / (obs.z + f);
+
+        // Ensure object is in front of camera
+        if (scale < 0) return;
+
+        const sx = CANVAS_WIDTH/2 + (obs.x - CANVAS_WIDTH/2) * scale;
+        const sy = horizonY + 100 * scale; // 100 is "camera height" offset
+        const size = 60 * scale;
+
+        if (obs.type === 'OBSTACLE') {
+            drawTrafficCone(sx, sy, size);
+        } else if (obs.type === 'TAG_TOKEN') {
+            drawTagToken(sx, sy, size);
+        }
+    });
+
+    // 4. Draw Particles
+    state.particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 4, 4);
+    });
+    ctx.globalAlpha = 1.0;
+
+    // 5. Draw Player
+    // Player is static Y, moves X
+    const playerY = CANVAS_HEIGHT - 80;
+    if (state.mode === 'SCOOTER') {
+        drawScooter(state.playerX, playerY, 1);
+    } else {
+        drawTagCar(state.playerX, playerY, 1);
+    }
+}
+
+function drawScooter(x, y, scale) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    // Glow
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = COLORS.martiGreen;
+
+    // Body (Stem)
+    ctx.strokeStyle = COLORS.martiGreen;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(0, 0); // Base center
+    ctx.lineTo(0, -40); // Handlebar stem
     ctx.stroke();
-    // Tower
-    ctx.fillStyle = 'rgba(30, 30, 80, 0.5)';
-    ctx.fillRect(bridge.x + bridge.w/2 - 10, 50, 20, HEIGHT);
 
+    // Handlebars
+    ctx.beginPath();
+    ctx.moveTo(-15, -40);
+    ctx.lineTo(15, -40);
+    ctx.stroke();
 
-    // 3. Far City
-    let layer = bgLayers[2];
-    layer.elements.forEach(el => {
-        el.x -= currentScrollSpeed * 0.3;
-    });
-    // Recycle
-    if(layer.elements[0].x + layer.elements[0].w < 0) {
-         let first = layer.elements.shift();
-         first.x = layer.elements[layer.elements.length-1].x + first.w;
-         first.h = 50 + Math.random()*80;
-         layer.elements.push(first);
-    }
+    // Base/Deck
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-10, 0, 20, 5);
 
-    ctx.fillStyle = '#0a3a5a';
-    layer.elements.forEach(el => {
-        ctx.fillRect(el.x, HEIGHT - 80 - el.h, el.w + 1, el.h + 80);
-    });
+    // Wheels (Viewed from back, simplified)
+    ctx.fillStyle = '#333';
+    ctx.beginPath();
+    ctx.arc(0, 5, 5, 0, Math.PI*2);
+    ctx.fill();
 
-    // 4. Near City (The floor collider)
-    ctx.fillStyle = '#15405e';
-    // Moving ground effect
-    ctx.fillRect(0, HEIGHT - 60, WIDTH, 60);
+    // Rider (Abstract)
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(0, -55, 8, 0, Math.PI*2); // Head
+    ctx.fill();
 
-    // Building details passing by in foreground
-    ctx.fillStyle = '#1e5175';
-    for(let i=0; i<10; i++) {
-        // use distance for offset
-        let bx = (i * 80) - (distance % 80);
-        ctx.fillRect(bx, HEIGHT - 60 - 30, 40, 30);
-        // Windows
-        ctx.fillStyle = '#FCEEB5';
-        if(i%2===0) ctx.fillRect(bx+5, HEIGHT-80, 5, 10);
-        ctx.fillStyle = '#1e5175'; // reset
-    }
+    // Body
+    ctx.fillStyle = COLORS.martiGreen;
+    ctx.fillRect(-6, -45, 12, 20);
+
+    ctx.restore();
 }
 
-// Collectibles & Obstacles
-let gameObjects = [];
+function drawTagCar(x, y, scale) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
 
-function spawnGameObject() {
-    // Spawn faster in Turbo mode
-    let rate = bird.turboTimer > 0 ? 30 : 60;
+    // Glow
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#ffff00';
 
-    if (frames % rate === 0) {
-        const rand = Math.random();
-        const y = 50 + Math.random() * (HEIGHT - 150);
+    // Car Body (Sedan rear view)
+    ctx.fillStyle = COLORS.tagBlack;
+    // Main chassis
+    ctx.fillRect(-20, -10, 40, 20);
+    // Roof
+    ctx.fillRect(-15, -25, 30, 15);
 
-        if (rand > 0.9) {
-             // Powerup: Scooter (Rare)
-             gameObjects.push({
-                type: 'scooter',
-                x: WIDTH,
-                y: y,
-                w: 40,
-                h: 30,
-                angle: 0
-            });
-        } else if (rand > 0.4) {
-            // Collectible: Battery / Logo
-            gameObjects.push({
-                type: 'collectible',
-                x: WIDTH,
-                y: y,
-                w: 30,
-                h: 30,
-                color: '#26D07C',
-                angle: 0
-            });
-        } else {
-            // Obstacle: Cloud / Wind
-            gameObjects.push({
-                type: 'obstacle',
-                x: WIDTH,
-                y: y,
-                w: 50,
-                h: 30,
-                color: '#ddd'
-            });
-        }
-    }
+    // Lights
+    ctx.fillStyle = '#ff0000'; // Tail lights
+    ctx.fillRect(-18, -5, 8, 4);
+    ctx.fillRect(10, -5, 8, 4);
+
+    // Wheels
+    ctx.fillStyle = '#222';
+    ctx.fillRect(-22, 5, 8, 8);
+    ctx.fillRect(14, 5, 8, 8);
+
+    // TAG Text on plate
+    ctx.fillStyle = '#fff';
+    ctx.font = '8px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('TAG', 0, 0);
+
+    ctx.restore();
 }
 
-function updateDrawGameObjects() {
-    for (let i = gameObjects.length - 1; i >= 0; i--) {
-        let obj = gameObjects[i];
+function drawTrafficCone(x, y, size) {
+    ctx.save();
+    ctx.translate(x, y);
+    // ctx.scale(size/50, size/50); // Scale based on size prop
 
-        // Magnet Effect in Turbo Mode
-        if (bird.turboTimer > 0 && obj.type !== 'obstacle') {
-            let dx = bird.x - obj.x;
-            let dy = bird.y - obj.y;
-            let dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist < 200) {
-                obj.x += (dx / dist) * 10;
-                obj.y += (dy / dist) * 10;
-            } else {
-                obj.x -= currentScrollSpeed;
-            }
-        } else {
-            obj.x -= currentScrollSpeed;
-        }
+    const s = size * 0.8;
 
-        // Draw
-        if (obj.type === 'collectible') {
-            obj.angle += 0.05;
-            ctx.save();
-            ctx.translate(obj.x + obj.w/2, obj.y + obj.h/2);
-            ctx.rotate(obj.angle);
+    ctx.fillStyle = '#ff5500';
+    ctx.beginPath();
+    ctx.moveTo(0, -s);
+    ctx.lineTo(s/2, 0);
+    ctx.lineTo(-s/2, 0);
+    ctx.fill();
 
-            // Draw Martı Logo-ish
-            ctx.fillStyle = obj.color;
-            ctx.beginPath();
-            ctx.moveTo(0, -15);
-            ctx.lineTo(12, 0);
-            ctx.lineTo(0, 15);
-            ctx.lineTo(-12, 0);
-            ctx.fill();
+    // Base
+    ctx.fillStyle = '#ff5500';
+    ctx.fillRect(-s/2, 0, s, s/5);
 
-            // Inner Bolt
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.moveTo(-2, -5);
-            ctx.lineTo(4, 0);
-            ctx.lineTo(-2, 5);
-            ctx.fill();
+    // White stripes
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-s/4, -s*0.7, s/2, s/5);
 
-            ctx.restore();
-        } else if (obj.type === 'scooter') {
-            // Draw Powerup Box
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-            ctx.strokeStyle = '#26D07C';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+    ctx.restore();
+}
 
-            // Scooter Icon
-            ctx.fillStyle = '#26D07C';
-            ctx.fillRect(obj.x + 5, obj.y + 20, 30, 5); // Deck
-            ctx.fillRect(obj.x + 25, obj.y + 5, 5, 20); // Stem
-            ctx.beginPath(); ctx.arc(obj.x+10, obj.y+25, 4, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(obj.x+35, obj.y+25, 4, 0, Math.PI*2); ctx.fill();
+function drawTagToken(x, y, size) {
+    ctx.save();
+    ctx.translate(x, y - size/2); // Float above ground
 
-        } else {
-            // Cloud Obstacle
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.beginPath();
-            ctx.arc(obj.x + 15, obj.y + 15, 15, 0, Math.PI*2);
-            ctx.arc(obj.x + 35, obj.y + 15, 12, 0, Math.PI*2);
-            ctx.arc(obj.x + 25, obj.y + 5, 15, 0, Math.PI*2);
-            ctx.fill();
-        }
+    const pulse = Math.sin(Date.now() / 100) * 0.2 + 1;
+    ctx.scale(pulse, pulse);
 
-        // Collision
-        if (
-            bird.x < obj.x + obj.w &&
-            bird.x + bird.width > obj.x &&
-            bird.y < obj.y + obj.h &&
-            bird.y + bird.height > obj.y
-        ) {
-            if (obj.type === 'collectible') {
-                // Combo Logic
-                comboCount++;
-                comboTimer = 60; // 1 second window
-                let multiplier = Math.min(5, Math.floor(comboCount / 2) + 1);
+    ctx.fillStyle = '#000';
+    ctx.strokeStyle = COLORS.martiGreen;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, size/2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
 
-                let points = 50 * multiplier;
-                score += points;
+    ctx.fillStyle = COLORS.martiGreen;
+    ctx.font = `${size/2}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('TAG', 0, 0);
 
-                spawnText(obj.x, obj.y, `+${points}`);
-                if (comboCount > 1) spawnText(obj.x, obj.y - 20, `${comboCount}x Combo!`, "#fff", 14);
-
-                spawnParticle(obj.x, obj.y, '#26D07C');
-                gameObjects.splice(i, 1);
-            } else if (obj.type === 'scooter') {
-                // Activate Turbo
-                bird.turboTimer = 300; // 5 seconds
-                spawnText(bird.x, bird.y - 30, "TURBO MODE!", "#fff", 24);
-                spawnParticle(obj.x, obj.y, '#FFD700');
-                score += 500;
-                gameObjects.splice(i, 1);
-            } else {
-                // Obstacle Hit
-                if (bird.turboTimer > 0) {
-                    // Destroy obstacle
-                    spawnText(obj.x, obj.y, "SMASH!");
-                    spawnParticle(obj.x, obj.y, '#fff');
-                    score += 20;
-                    gameObjects.splice(i, 1);
-                } else {
-                    // Penalty
-                    spawnText(bird.x, bird.y, "Ups!");
-                    score = Math.max(0, score - 10);
-                    bird.velocity = 5;
-                    bird.x -= 10;
-                    comboCount = 0; // Reset combo
-                    setTimeout(() => { if(bird.x < 60) bird.x = 60; }, 300);
-                    gameObjects.splice(i, 1);
-                }
-            }
-        }
-
-        if (obj.x + obj.w < -50) {
-            gameObjects.splice(i, 1);
-        }
-    }
-
-    if(bird.x < 60) bird.x += 0.5;
+    ctx.restore();
 }
 
 
-// Input Handling
-const adContainer = document.getElementById('ad-container');
-
-function startInput(e) {
-    e.preventDefault();
-    isTouching = true;
-    if (gameState === 'START') startGame();
-}
-
-function endInput(e) {
-    e.preventDefault();
-    isTouching = false;
-}
-
-adContainer.addEventListener('mousedown', startInput);
-adContainer.addEventListener('mouseup', endInput);
-adContainer.addEventListener('touchstart', startInput, {passive: false});
-adContainer.addEventListener('touchend', endInput, {passive: false});
-
-document.getElementById('restart-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    startGame();
-});
-
-function startGame() {
-    document.getElementById('start-screen').classList.add('hidden');
-    document.getElementById('hud').classList.remove('hidden');
-    document.getElementById('game-over-screen').classList.add('hidden');
-    gameState = 'PLAYING';
-
-    // Reset Game State
-    bird.y = HEIGHT / 2;
-    bird.velocity = 0;
-    bird.x = 60;
-    bird.turboTimer = 0;
-    frames = 0;
-    distance = 0;
-    score = 0;
-    comboCount = 0;
-    gameObjects = [];
-    particles = [];
-    texts = [];
-
-    initBackgrounds();
-    loop();
-}
-
-function gameOver() {
-    gameState = 'GAMEOVER';
-    document.getElementById('hud').classList.add('hidden');
-    document.getElementById('game-over-screen').classList.remove('hidden');
-    document.getElementById('final-score').innerText = score;
-}
+// --- LOOP ---
 
 function loop() {
-    if (gameState !== 'PLAYING') return;
+    if (!state.isPlaying) return;
 
-    ctx.clearRect(0, 0, WIDTH, HEIGHT);
-
-    // Update
-    frames++;
-    distance += currentScrollSpeed;
-
-    if (comboTimer > 0) comboTimer--;
-    else comboCount = 0;
-
-    updateDrawBackgrounds();
-
-    spawnGameObject();
-    updateDrawGameObjects();
-
-    bird.update();
-    bird.draw();
-
-    updateDrawParticles();
-    updateDrawTexts();
-
-    // UI Update
-    document.getElementById('score').innerText = score;
-    const progressPct = Math.min(100, (distance / MAX_DISTANCE) * 100);
-    document.getElementById('progress-bar').style.width = progressPct + '%';
-    document.getElementById('progress-icon').style.left = `calc(${progressPct}% - 10px)`;
-
-    // Win Condition
-    if (distance >= MAX_DISTANCE) {
-        gameOver();
-        return;
-    }
+    update();
+    draw();
 
     requestAnimationFrame(loop);
 }
 
-// Initial Render
-initBackgrounds();
-updateDrawBackgrounds();
-bird.draw();
+// Initial Draw (Background)
+draw();
